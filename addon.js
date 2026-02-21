@@ -79,11 +79,53 @@ async function fetchMovies() {
     }
 }
 
+// Helper: Scrape all content from specific category pages
+async function fetchAll(category) {
+    const cacheKey = `all_${category}`;
+    const now = Date.now();
+    if (cache[cacheKey] && (now - cache.lastFetched < cache.ttl)) return cache[cacheKey];
+
+    try {
+        console.log(`Scraping all content for ${category}...`);
+        const response = await axios.get(`${SUPERFLIX_API_BASE}/${category}`, { timeout: 10000 });
+        const html = response.data;
+
+        const items = [];
+        const titleRegex = /data-copy="([^"]+)"[^>]*>\s*<i[^>]*><\/i>\s*Título/g;
+        const imdbRegex = /data-copy="(tt\d+)"[^>]*>\s*<i[^>]*><\/i>\s*IMDB/g;
+
+        const titles = [];
+        let match;
+        while ((match = titleRegex.exec(html)) !== null) titles.push(match[1]);
+
+        const ids = [];
+        while ((match = imdbRegex.exec(html)) !== null) ids.push(match[1]);
+
+        for (let i = 0; i < Math.min(titles.length, ids.length); i++) {
+            items.push({
+                title: titles[i],
+                imdb_id: ids[i],
+                type: category === 'filmes' ? 1 : (category === 'series' ? 2 : 3)
+            });
+        }
+
+        if (items.length > 0) {
+            cache[cacheKey] = items;
+            cache.lastFetched = now;
+        }
+        return items;
+    } catch (error) {
+        console.error(`Error fetching all ${category}:`, error.message);
+        return cache[cacheKey] || [];
+    }
+}
+
 // Catalog Handler
 builder.defineCatalogHandler(async (args) => {
     const { type, id } = args;
     console.log(`Requested catalog: ${type} - ${id}`);
 
+    // Recent Movies
     if (id === 'ioannesbn_movies') {
         const movies = await fetchMovies();
         return {
@@ -91,12 +133,27 @@ builder.defineCatalogHandler(async (args) => {
                 id: item.imdb_id,
                 type: 'movie',
                 name: item.title,
-                poster: `https://images.metahub.space/poster/small/${item.imdb_id}/img`, // Fallback poster
-                description: 'SuperFlixAPI Movie'
+                poster: `https://images.metahub.space/poster/small/${item.imdb_id}/img`,
+                description: 'SuperFlixAPI Recent Movie'
             }))
         };
     }
 
+    // All Movies
+    if (id === 'ioannesbn_all_movies') {
+        const movies = await fetchAll('filmes');
+        return {
+            metas: movies.map(item => ({
+                id: item.imdb_id,
+                type: 'movie',
+                name: item.title,
+                poster: `https://images.metahub.space/poster/small/${item.imdb_id}/img`,
+                description: 'SuperFlixAPI All Movies'
+            }))
+        };
+    }
+
+    // Recent Series / Anime / Dorama
     if (id === 'ioannesbn_series' || id === 'ioannesbn_anime') {
         const calendarData = await fetchCalendar();
         const metas = calendarData
@@ -116,11 +173,51 @@ builder.defineCatalogHandler(async (args) => {
             }))
             .filter(meta => meta.id && !meta.id.includes('undefined'));
 
-        // Removing duplicates
         const uniqueMetas = Array.from(new Set(metas.map(m => m.id)))
             .map(id => metas.find(m => m.id === id));
-
         return { metas: uniqueMetas };
+    }
+
+    // All Series
+    if (id === 'ioannesbn_all_series') {
+        const series = await fetchAll('series');
+        return {
+            metas: series.map(item => ({
+                id: item.imdb_id,
+                type: 'series',
+                name: item.title,
+                poster: `https://images.metahub.space/poster/small/${item.imdb_id}/img`,
+                description: 'SuperFlixAPI All Series'
+            }))
+        };
+    }
+
+    // All Anime
+    if (id === 'ioannesbn_all_anime') {
+        const animes = await fetchAll('animes');
+        return {
+            metas: animes.map(item => ({
+                id: item.imdb_id,
+                type: 'anime',
+                name: item.title,
+                poster: `https://images.metahub.space/poster/small/${item.imdb_id}/img`,
+                description: 'SuperFlixAPI All Animes'
+            }))
+        };
+    }
+
+    // All Dorama
+    if (id === 'ioannesbn_all_doramas') {
+        const doramas = await fetchAll('doramas');
+        return {
+            metas: doramas.map(item => ({
+                id: item.imdb_id,
+                type: 'anime',
+                name: item.title,
+                poster: `https://images.metahub.space/poster/small/${item.imdb_id}/img`,
+                description: 'SuperFlixAPI All Doramas'
+            }))
+        };
     }
 
     return { metas: [] };
@@ -175,14 +272,22 @@ builder.defineStreamHandler(async (args) => {
         return {
             streams: [
                 {
-                    name: 'SuperFlixAPI',
-                    title: `Player Oficial 01\n${(type === 'series' || type === 'anime') && season ? `T${season} E${episode}` : ''}`,
+                    name: 'SuperFlix (WEB)',
+                    title: `Player Oficial 01 (Estável)\n${(type === 'series' || type === 'anime') && season ? `T${season} E${episode}` : ''}`,
                     externalUrl: sfUrl
                 },
                 {
-                    name: 'Vizer.online',
-                    title: `Player Oficial 02\n${(type === 'series' || type === 'anime') && season ? `T${season} E${episode}` : ''}`,
+                    name: 'Vizer (WEB)',
+                    title: `Player Oficial 02 (Estável)\n${(type === 'series' || type === 'anime') && season ? `T${season} E${episode}` : ''}`,
                     externalUrl: vizerUrl
+                },
+                {
+                    name: 'SuperFlix (APP)',
+                    title: `Modo Interno (Experimental)\n⚠️ Pode não funcionar em todos os aparelhos`,
+                    url: sfUrl,
+                    behaviorHints: {
+                        notWebReady: false
+                    }
                 }
             ]
         };

@@ -1,8 +1,10 @@
 const manifest = {
     id: 'com.ioannesbn.addon',
-    version: '1.0.1',
+    version: '1.2.0',
     name: 'IoannesBn',
-    description: 'Extensão Stremio completa para filmes, séries, animes e doramas (SuperFlixAPI.help)',
+    description: 'Era isso que você queria bolsonaro? uma menina pescotapa?',
+    logo: 'https://i.pinimg.com/1200x/29/70/68/297068f0428d077d9ac4a00f56d99147.jpg',
+    background: 'https://i.pinimg.com/1200x/29/70/68/297068f0428d077d9ac4a00f56d99147.jpg',
     resources: ['catalog', 'meta', 'stream'],
     types: ['movie', 'series', 'anime'],
     idPrefixes: ['tt'],
@@ -21,10 +23,28 @@ const manifest = {
             type: 'anime',
             id: 'ioannesbn_anime',
             name: 'IoannesBn - Animes & Doramas'
+        },
+        {
+            type: 'movie',
+            id: 'ioannesbn_all_movies',
+            name: 'IoannesBn - Todos os Filmes'
+        },
+        {
+            type: 'series',
+            id: 'ioannesbn_all_series',
+            name: 'IoannesBn - Todas as Séries'
+        },
+        {
+            type: 'anime',
+            id: 'ioannesbn_all_anime',
+            name: 'IoannesBn - Todos os Animes'
+        },
+        {
+            type: 'anime',
+            id: 'ioannesbn_all_doramas',
+            name: 'IoannesBn - Todos os Doramas'
         }
     ],
-    background: 'https://superflixapi.help/images/logo.png',
-    logo: 'https://superflixapi.help/images/logo.png',
     contactEmail: 'admin@ioannesbn.com'
 };
 
