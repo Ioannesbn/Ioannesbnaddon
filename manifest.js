@@ -3,19 +3,24 @@ const manifest = {
     version: '1.0.0',
     name: 'IoannesBn',
     description: 'Extensão Stremio para reproduzir filmes e séries do SuperFlixAPI.help',
-    resources: ['catalog', 'stream'],
-    types: ['movie', 'series'],
+    resources: ['catalog', 'meta', 'stream'],
+    types: ['movie', 'series', 'anime'],
     idPrefixes: ['tt'],
     catalogs: [
         {
             type: 'movie',
             id: 'ioannesbn_recent_movies',
-            name: 'IoannesBn - Filmes Recentes'
+            name: 'IoannesBn - Filmes'
         },
         {
             type: 'series',
             id: 'ioannesbn_recent_series',
-            name: 'IoannesBn - Séries Recentes'
+            name: 'IoannesBn - Séries'
+        },
+        {
+            type: 'anime',
+            id: 'ioannesbn_recent_anime',
+            name: 'IoannesBn - Animes'
         }
     ],
     background: 'https://superflixapi.help/images/logo.png',

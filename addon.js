@@ -44,8 +44,10 @@ builder.defineCatalogHandler(async (args) => {
 
         const metas = calendarData
             .filter(item => {
-                if (type === 'movie') return item.type === 1; // 1 for movies usually, but let's check
-                if (type === 'series') return item.type === 2 || item.type === 3 || item.type === 5;
+                const itemType = parseInt(item.type);
+                if (type === 'movie') return itemType === 1;
+                if (type === 'series') return itemType === 2;
+                if (type === 'anime') return itemType === 3 || itemType === 5; // Animes and Doramas
                 return false;
             })
             .map(item => ({
@@ -68,6 +70,32 @@ builder.defineCatalogHandler(async (args) => {
     return { metas: [] };
 });
 
+// Meta Handler (to provide better metadata if available)
+builder.defineMetaHandler(async (args) => {
+    const { type, id } = args;
+    console.log(`Requested meta for: ${type} - ${id}`);
+
+    // We can rely on Cinemeta for standard IMDb IDs, but we can also return cached data
+    if (cache.data) {
+        const item = cache.data.find(i => i.imdb_id === id);
+        if (item) {
+            return {
+                meta: {
+                    id: item.imdb_id,
+                    type: type,
+                    name: item.title,
+                    poster: `https://image.tmdb.org/t/p/w500${item.poster}`,
+                    background: `https://image.tmdb.org/t/p/original${item.backdrop}`,
+                    description: `SuperFlixAPI - Temporada ${item.season} EP ${item.number}`,
+                    releaseInfo: item.air_date
+                }
+            };
+        }
+    }
+
+    return { meta: null };
+});
+
 // Stream Handler
 builder.defineStreamHandler(async (args) => {
     const { type, id } = args;
@@ -83,13 +111,8 @@ builder.defineStreamHandler(async (args) => {
         let externalUrl = '';
         if (type === 'movie') {
             externalUrl = `${SUPERFLIX_API_BASE}/filme/${imdbId}`;
-        } else if (type === 'series' && season && episode) {
-            // Some APIs support direct season/episode path
-            externalUrl = `${SUPERFLIX_API_BASE}/serie/${imdbId}`;
-            // Optional: add hash for direct episode if the site supports it
-            // Based on doc, they use /serie/ID or /episodio/ID?
-            // Let's stick to the main series player which usually has episode selection
         } else {
+            // Unificado para Séries, Animes e Doramas
             externalUrl = `${SUPERFLIX_API_BASE}/serie/${imdbId}`;
         }
 
@@ -98,7 +121,7 @@ builder.defineStreamHandler(async (args) => {
                 streams: [
                     {
                         name: 'IoannesBn',
-                        title: `Assistir no SuperFlixAPI\n${type === 'series' && season ? `T${season} E${episode}` : ''}`,
+                        title: `Assistir no SuperFlixAPI\n${(type === 'series' || type === 'anime') && season ? `T${season} E${episode}` : ''}`,
                         externalUrl: externalUrl
                     }
                 ]
