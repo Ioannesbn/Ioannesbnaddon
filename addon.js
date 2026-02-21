@@ -5,12 +5,14 @@ const manifest = require('./manifest');
 const builder = new addonBuilder(manifest);
 
 const SUPERFLIX_API_BASE = 'https://superflixapi.help';
+const VIZER_BASE = 'https://vizer.online';
 const CALENDARIO_URL = `${SUPERFLIX_API_BASE}/calendario.php`;
 
 // Simple in-memory cache
 const cache = {
     calendar: null,
     movies: null,
+    vizer: null,
     lastFetched: 0,
     ttl: 30 * 60 * 1000 // 30 minutes
 };
@@ -37,23 +39,39 @@ async function fetchMovies() {
     if (cache.movies && (now - cache.lastFetched < cache.ttl)) return cache.movies;
 
     try {
+        console.log('Scraping fresh movie data...');
         const response = await axios.get(`${SUPERFLIX_API_BASE}/filmes`, { timeout: 10000 });
         const html = response.data;
 
-        // Simple regex to extract movie basic info
-        // Pattern: find titles and tt IDs
-        const movieRegex = /<h3[^>]*>(.*?)<\/h3>.*?href="[^"]*\/filme\/(tt\d+)"/gs;
         const movies = [];
-        let match;
-        while ((match = movieRegex.exec(html)) !== null) {
+        const titleRegex = /data-copy="([^"]+)"[^>]*>\s*<i[^>]*><\/i>\s*Título/g;
+        const imdbRegex = /data-copy="(tt\d+)"[^>]*>\s*<i[^>]*><\/i>\s*IMDB/g;
+
+        let titleMatch;
+        let imdbMatch;
+
+        const titles = [];
+        while ((titleMatch = titleRegex.exec(html)) !== null) {
+            titles.push(titleMatch[1]);
+        }
+
+        const ids = [];
+        while ((imdbMatch = imdbRegex.exec(html)) !== null) {
+            ids.push(imdbMatch[1]);
+        }
+
+        for (let i = 0; i < Math.min(titles.length, ids.length); i++) {
             movies.push({
-                title: match[1].trim(),
-                imdb_id: match[2],
-                type: 1 // Movie
+                title: titles[i],
+                imdb_id: ids[i],
+                type: 1
             });
         }
 
-        if (movies.length > 0) cache.movies = movies;
+        if (movies.length > 0) {
+            cache.movies = movies;
+            cache.lastFetched = now;
+        }
         return movies;
     } catch (error) {
         console.error('Error fetching movies:', error.message);
@@ -145,31 +163,26 @@ builder.defineStreamHandler(async (args) => {
         const season = parts[1];
         const episode = parts[2];
 
-        // Construct source URL
-        const sourceUrl = type === 'movie'
+        // Construct source URLs
+        const sfUrl = type === 'movie'
             ? `${SUPERFLIX_API_BASE}/filme/${imdbId}`
             : `${SUPERFLIX_API_BASE}/serie/${imdbId}`;
 
-        // We provide the player URL. To avoid "browser redirect", 
-        // we use the official player name and title.
+        const vizerUrl = type === 'movie'
+            ? `${VIZER_BASE}/filme/${imdbId}`
+            : `${VIZER_BASE}/serie/${imdbId}`;
+
         return {
             streams: [
                 {
-                    name: 'SuperFlix (HLS)',
-                    title: `Assistir em 1080p/720p\n${type !== 'movie' && season ? `T${season} E${episode}` : ''}`,
-                    url: sourceUrl, // Providing it as URL might work in some player wrappers
-                    behaviorHints: {
-                        notWebReady: false,
-                        proxyHeaders: {
-                            "Referer": SUPERFLIX_API_BASE,
-                            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-                        }
-                    }
+                    name: 'SuperFlixAPI',
+                    title: `Player Oficial 01\n${(type === 'series' || type === 'anime') && season ? `T${season} E${episode}` : ''}`,
+                    externalUrl: sfUrl
                 },
                 {
-                    name: 'SuperFlix (External)',
-                    title: 'Abrir no Player Externo (100% Funcional)',
-                    externalUrl: sourceUrl
+                    name: 'Vizer.online',
+                    title: `Player Oficial 02\n${(type === 'series' || type === 'anime') && season ? `T${season} E${episode}` : ''}`,
+                    externalUrl: vizerUrl
                 }
             ]
         };
