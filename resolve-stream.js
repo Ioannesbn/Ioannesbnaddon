@@ -1,60 +1,78 @@
 const axios = require('axios');
 
-async function resolveStream() {
-    const testUrl = 'https://vizer.online/filme/napoli-new-york';
-    console.log(`Resolving stream for ${testUrl}...`);
+const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 
-    try {
-        const response = await axios.get(testUrl, {
-            headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+async function resolveSuperFlix(metaId, type) {
+    const parts = metaId.split(':');
+    const imdbId = parts[0];
+    const season = parts[1];
+    const episode = parts[2];
+
+    const mirrors = [
+        'superflixapi.help',
+        'superflix.vc',
+        'superflix.top'
+    ];
+
+    for (const domain of mirrors) {
+        try {
+            const warezUrl = type === 'movie'
+                ? `https://${domain}/api/v2/stream/${imdbId}`
+                : `https://${domain}/api/v2/stream/${imdbId}/${season}/${episode}`;
+
+            console.log(`Checking mirror: ${warezUrl}`);
+            const response = await axios.get(warezUrl, {
+                headers: { 'Referer': `https://${domain}/`, 'User-Agent': UA },
+                timeout: 4000
+            });
+
+            if (response.data && response.data.url) {
+                return {
+                    url: response.data.url,
+                    headers: { 'Referer': `https://${domain}/`, 'User-Agent': UA }
+                };
             }
-        });
-        const html = response.data;
-
-        // Look for any script that might contain the video URL
-        // Patterns often used: file: "...", url: "...", source: "..."
-        const patterns = [
-            /file\s*:\s*["'](https?:\/\/[^"']+\.m3u8[^"']*)["']/i,
-            /file\s*:\s*["'](https?:\/\/[^"']+\.mp4[^"']*)["']/i,
-            /source\s*:\s*["'](https?:\/\/[^"']+\.m3u8[^"']*)["']/i,
-            /url\s*:\s*["'](https?:\/\/[^"']+\.m3u8[^"']*)["']/i
-        ];
-
-        let found = false;
-        for (const pattern of patterns) {
-            const match = html.match(pattern);
-            if (match) {
-                console.log(`Found direct stream: ${match[1]}`);
-                found = true;
-                break;
-            }
+        } catch (e) {
+            // Try next mirror
         }
-
-        if (!found) {
-            console.log('No direct stream found in main page. Checking iframes...');
-            const iframeMatch = html.match(/<iframe[^>]*src="([^"]+)"/i);
-            if (iframeMatch) {
-                console.log(`Checking iframe: ${iframeMatch[1]}`);
-                // Recursively check iframe if needed, but for now just print it
-            }
-        }
-
-        // Look for any Base64 strings that might be URLs
-        const b64Regex = /["']([A-Za-z0-9+/=]{40,})["']/g;
-        let b64Match;
-        while ((b64Match = b64Regex.exec(html)) !== null) {
-            try {
-                const decoded = Buffer.from(b64Match[1], 'base64').toString('utf-8');
-                if (decoded.includes('http')) {
-                    console.log(`Found decoded URL: ${decoded}`);
-                }
-            } catch (e) { }
-        }
-
-    } catch (e) {
-        console.error(`Error: ${e.message}`);
     }
+
+    // Try scraping the player page directly as a fallback
+    try {
+        const playerUrl = `https://superflixapi.help/${type === 'movie' ? 'filme' : 'serie'}/${imdbId}`;
+        const res = await axios.get(playerUrl, { headers: { 'User-Agent': UA }, timeout: 4000 });
+        const m3u8 = res.data.match(/["'](https?:\/\/[^"']+\.m3u8[^"']*)["']/i);
+        if (m3u8) {
+            return {
+                url: m3u8[1],
+                headers: { 'Referer': playerUrl, 'User-Agent': UA }
+            };
+        }
+    } catch (e) { }
+
+    return null;
 }
 
-resolveStream();
+async function resolveVizer(metaId, type) {
+    const imdbId = metaId.split(':')[0];
+    const mirrors = ['vizer.online', 'vizer.tv', 'vizer.link'];
+
+    for (const domain of mirrors) {
+        try {
+            const path = type === 'movie' ? 'filme' : 'serie';
+            const url = `https://${domain}/${path}/${imdbId}`;
+            const res = await axios.get(url, { headers: { 'User-Agent': UA }, timeout: 4000 });
+
+            const m3u8 = res.data.match(/["'](https?:\/\/[^"']+\.m3u8[^"']*)["']/i);
+            if (m3u8) {
+                return {
+                    url: m3u8[1],
+                    headers: { 'Referer': url, 'User-Agent': UA }
+                };
+            }
+        } catch (e) { }
+    }
+    return null;
+}
+
+module.exports = { resolveSuperFlix, resolveVizer };

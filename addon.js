@@ -249,48 +249,67 @@ builder.defineMetaHandler(async (args) => {
     return { meta: null }; // Let Cinemeta handle it if not in our recent cache
 });
 
+const { resolveSuperFlix, resolveVizer } = require('./resolve-stream');
+
+// ... (previous handlers)
+
 // Stream Handler
 builder.defineStreamHandler(async (args) => {
     const { type, id } = args;
     console.log(`Requested stream for: ${type} - ${id}`);
 
     if (id.startsWith('tt')) {
-        const parts = id.split(':');
-        const imdbId = parts[0];
-        const season = parts[1];
-        const episode = parts[2];
+        const streams = [];
 
-        // Construct source URLs
-        const sfUrl = type === 'movie'
-            ? `${SUPERFLIX_API_BASE}/filme/${imdbId}`
-            : `${SUPERFLIX_API_BASE}/serie/${imdbId}`;
-
-        const vizerUrl = type === 'movie'
-            ? `${VIZER_BASE}/filme/${imdbId}`
-            : `${VIZER_BASE}/serie/${imdbId}`;
-
-        return {
-            streams: [
-                {
-                    name: 'SuperFlix (WEB)',
-                    title: `Player Oficial 01 (Estável)\n${(type === 'series' || type === 'anime') && season ? `T${season} E${episode}` : ''}`,
-                    externalUrl: sfUrl
-                },
-                {
-                    name: 'Vizer (WEB)',
-                    title: `Player Oficial 02 (Estável)\n${(type === 'series' || type === 'anime') && season ? `T${season} E${episode}` : ''}`,
-                    externalUrl: vizerUrl
-                },
-                {
-                    name: 'SuperFlix (APP)',
-                    title: `Modo Interno (Experimental)\n⚠️ Pode não funcionar em todos os aparelhos`,
-                    url: sfUrl,
-                    behaviorHints: {
-                        notWebReady: false
+        // Attempt internal resolution for SuperFlix
+        const sfInternal = await resolveSuperFlix(id, type);
+        if (sfInternal) {
+            streams.push({
+                name: 'IoannesBn - Interno 01',
+                title: `Player SuperFlix (Nativo)\nHD 1080p - Português`,
+                url: sfInternal.url,
+                behaviorHints: {
+                    notWebReady: false,
+                    proxyHeaders: {
+                        "request": sfInternal.headers
                     }
                 }
-            ]
-        };
+            });
+        }
+
+        // Attempt internal resolution for Vizer
+        const vizerInternal = await resolveVizer(id, type);
+        if (vizerInternal) {
+            streams.push({
+                name: 'IoannesBn - Interno 02',
+                title: `Player Vizer (Nativo)\nHD 720p - Português`,
+                url: vizerInternal.url,
+                behaviorHints: {
+                    notWebReady: false,
+                    proxyHeaders: {
+                        "request": vizerInternal.headers
+                    }
+                }
+            });
+        }
+
+        // If both fail, let's provide a "Browser" fallback as a LAST resort 
+        // to avoid "No streams found" which is even worse
+        if (streams.length === 0) {
+            const parts = id.split(':');
+            const imdbId = parts[0];
+            const fallbackUrl = type === 'movie'
+                ? `${SUPERFLIX_API_BASE}/filme/${imdbId}`
+                : `${SUPERFLIX_API_BASE}/serie/${imdbId}`;
+
+            streams.push({
+                name: 'IoannesBn - Navegador',
+                title: `⚠️ Erro no modo interno. Abrir no navegador.`,
+                externalUrl: fallbackUrl
+            });
+        }
+
+        return { streams };
     }
 
     return { streams: [] };
